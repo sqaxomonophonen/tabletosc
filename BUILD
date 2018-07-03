@@ -1,0 +1,3 @@
+ - run xcodebuild in libusb/Xcode
+ - copy libusb/Xcode/build/Release/libusb-1.0.0.dylib here
+ - also copy libusb/libusb/libusb.h here
