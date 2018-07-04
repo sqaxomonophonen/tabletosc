@@ -167,6 +167,9 @@ static void pen_handler(uint8_t* data)
 		new_state.flags &= ~FLAG_PENBTN;
 		new_state.flags &= ~FLAG_PROXIMITY;
 		new_state.flags &= ~FLAG_CONTACT;
+		new_state.flags &= ~FLAG_ERASER;
+		new_state.proximity = 0;
+		new_state.pressure = 0;
 	} else if ((data[1] & 0xf0) == 0xe0) {
 		#if DEBUG
 		printf("PEN:");
@@ -208,11 +211,11 @@ static void pen_handler(uint8_t* data)
 		#endif
 		new_state.pressure = (float)pressure / 1023.0f;
 
-		int proximity = data[8]; // range: [0:32] ish, but goes a bit further
+		int proximity = data[8]; // range: [0:31] ish, but goes a bit further
 		#if DEBUG
 		printf(" proximity=%.2d", proximity);
 		#endif
-		new_state.proximity = (float)proximity / 32.0f;
+		new_state.proximity = (float)proximity / 31.0f;
 
 		#if 0
 		for (int i = 0; i < PEN_PKGLEN; i++) printf(" %.2x", data[i]);
@@ -293,6 +296,14 @@ static void setup_transfer(libusb_device_handle *handle, int endpoint, int bufsz
 	if (r < 0) fprintf(stderr, "libusb_submit_transfer failed %d\n", r);
 }
 
+void set_cfg(libusb_device_handle* handle, int cfg) {
+	int r = libusb_set_configuration(handle, cfg);
+	if (r < 0) {
+		fprintf(stderr, "failed to set configuration %d\n", cfg);
+		exit(EXIT_FAILURE);
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 3) {
@@ -331,17 +342,14 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
-	/* XXX seems I have to set cfg 0 (reset?) and then 1 (only one there
-	 * is?), otherwise, libusb_claim_interface() fails.. and even then it
-	 * fails the first time?! maybe try claiming interface for a while...
-	 * */
-	for (int cfg = 0; cfg < 2; cfg++) {
-		r = libusb_set_configuration(handle, cfg);
-		if (r < 0) {
-			fprintf(stderr, "failed to set configuration %d\n", cfg);
-			exit(EXIT_FAILURE);
-		}
-	}
+	/* on macOS I have to do this weird dance, otherwise
+	 * libusb_claim_interface fails, but only when the device has just been
+	 * physically connected... I suspect it has something to do with
+	 * fooling macOS into releasing the device? */
+	set_cfg(handle, 0);
+	set_cfg(handle, 1);
+	set_cfg(handle, 0);
+	set_cfg(handle, 1);
 
 	/*
 	interface 0 is stylus, and 1 is touch, I believe?
